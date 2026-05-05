@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ReallySmartHouse</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -142,6 +144,37 @@
     margin-bottom: 10px;
   }
 
+  #pet-map {
+    width: 100%;
+    height: 280px;
+    border-radius: 10px;
+    margin-top: 14px;
+    border: 1px solid rgba(245,158,11,0.2);
+  }
+
+  /* Fix leaflet controls on dark bg */
+  .leaflet-control-zoom a {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border-color: var(--card-border) !important;
+  }
+  .leaflet-control-attribution {
+    background: rgba(17,24,39,0.8) !important;
+    color: var(--text-dim) !important;
+    font-size: 9px !important;
+  }
+  .leaflet-control-attribution a { color: var(--accent-cyan) !important; }
+  .gw-tooltip {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 6px !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 11px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+  }
+  .gw-tooltip::before { border-top-color: var(--card-border) !important; }
+
   @media (max-width: 600px) {
     .container { padding: 16px 12px; }
     .card { padding: 20px 18px; }
@@ -270,6 +303,7 @@
           <span class="data-value" id="pet-lorawan-snr" style="font-size:18px;">--<span class="data-unit">dB</span></span>
         </div>
       </div>
+      <div id="pet-map"></div>
     </div>
   </div>
 
@@ -358,36 +392,38 @@ function handleMessage(topic, message) {
     document.getElementById('pet-time').textContent = 'updated ' + now;
   }
   else if (topic === TOPICS.petLorawan) {
-    // LoRaWAN message format: {"status":"PET_MISSING","rssi":-98,"snr":-1,"devEUI":"...","time":"..."}
+    // LoRaWAN format: {"status":"PET_MISSING","rssi":-90,"snr":14,"gw_lat":55.78,"gw_lon":12.51,"devEUI":"...","time":"..."}
     const rssi = data.rssi !== undefined ? parseInt(data.rssi) : null;
     const snr = data.snr !== undefined ? parseFloat(data.snr) : null;
     const status = data.status || 'UNKNOWN';
+    const gwLat = data.gw_lat !== undefined ? parseFloat(data.gw_lat) : null;
+    const gwLon = data.gw_lon !== undefined ? parseFloat(data.gw_lon) : null;
     
     // Estimate distance from RSSI using log-distance path loss model
-    // d = 10 ^ ((RSSI_ref - RSSI) / (10 * n))
-    // RSSI_ref = -69 dBm at 1 meter (typical for LoRa gateway)
-    // n = 2.7 (path loss exponent, semi-urban/indoor environment)
-    let distance = '--';
+    const rssiRef = -69;   // RSSI at 1 meter
+    const n = 2.7;         // path loss exponent (outdoor/semi-urban)
+    let distMeters = null;
+    let distLabel = '--';
     if (rssi !== null) {
-      const rssiRef = -69;   // RSSI at 1 meter reference
-      const n = 2.7;         // path loss exponent
-      const distMeters = Math.pow(10, (rssiRef - rssi) / (10 * n));
-      distance = distMeters < 1000 ? distMeters.toFixed(0) : (distMeters / 1000).toFixed(1) + 'k';
+      distMeters = Math.pow(10, (rssiRef - rssi) / (10 * n));
+      distLabel = distMeters < 1000 ? distMeters.toFixed(0) : (distMeters / 1000).toFixed(1) + 'k';
     }
     
-    setVal('pet-lorawan-dist', distance, 'm');
+    setVal('pet-lorawan-dist', distLabel, 'm');
     setVal('pet-lorawan-rssi', rssi !== null ? rssi : '--', 'dBm');
     setVal('pet-lorawan-snr', snr !== null ? snr.toFixed(1) : '--', 'dB');
-    document.getElementById('pet-lorawan-status').textContent = status.replace('_', ' ');
+    document.getElementById('pet-lorawan-status').textContent = status.replace(/_/g, ' ');
     
-    // Determine zone from status or distance
-    let zone = 2; // alarm by default for LoRaWAN (pet is far)
-    if (status === 'PET_NEARBY') zone = 1;  // warning
+    let zone = 2;
+    if (status === 'PET_NEARBY') zone = 1;
     updatePetZone(zone);
-    
     setPetMode('lorawan');
     
-    // Show timestamp from the message if available, otherwise use local time
+    // Update map if gateway coordinates are available
+    if (gwLat !== null && gwLon !== null) {
+      updatePetMap(gwLat, gwLon, distMeters);
+    }
+    
     const msgTime = data.time ? new Date(data.time).toLocaleTimeString('en-GB', {hour12: false}) : now;
     document.getElementById('pet-time').textContent = 'updated ' + msgTime + ' (LoRaWAN)';
   }
@@ -445,6 +481,78 @@ function toggleCmd(topic, btnId) {
 }
 
 function timeStr() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
+
+// ── Map ─────────────────────────────────────────────────────
+let petMap = null;
+let gwMarker = null;
+let distCircle = null;
+
+function updatePetMap(lat, lon, radiusMeters) {
+  const mapDiv = document.getElementById('pet-map');
+  if (!mapDiv) return;
+
+  // Initialize map if first time
+  if (!petMap) {
+    petMap = L.map('pet-map', {
+      zoomControl: true,
+      attributionControl: true,
+      scrollWheelZoom: true,
+    }).setView([lat, lon], 15);
+
+    // Dark tile layer to match dashboard theme
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OSM &copy; CARTO',
+      maxZoom: 19,
+    }).addTo(petMap);
+  }
+
+  // Update or create gateway marker
+  if (gwMarker) {
+    gwMarker.setLatLng([lat, lon]);
+  } else {
+    const gwIcon = L.divIcon({
+      className: '',
+      html: '<div style="width:14px;height:14px;background:#f59e0b;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(245,158,11,0.6);"></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    gwMarker = L.marker([lat, lon], { icon: gwIcon }).addTo(petMap);
+    gwMarker.bindTooltip('LoRaWAN Gateway', {
+      permanent: false,
+      direction: 'top',
+      className: 'gw-tooltip',
+    });
+  }
+
+  // Update or create distance circle
+  const radius = radiusMeters ? Math.max(radiusMeters, 20) : 100;
+  if (distCircle) {
+    distCircle.setLatLng([lat, lon]);
+    distCircle.setRadius(radius);
+  } else {
+    distCircle = L.circle([lat, lon], {
+      radius: radius,
+      color: '#ef4444',
+      fillColor: '#ef4444',
+      fillOpacity: 0.12,
+      weight: 2,
+      dashArray: '8, 6',
+    }).addTo(petMap);
+  }
+
+  // Add label to circle
+  distCircle.bindTooltip('Pet is approx. within this area (~' + Math.round(radius) + 'm)', {
+    permanent: false,
+    direction: 'center',
+    className: 'gw-tooltip',
+  });
+
+  // Fit map to show the circle
+  petMap.fitBounds(distCircle.getBounds().pad(0.3));
+
+  // Force map to redraw (needed when container was hidden)
+  setTimeout(() => petMap.invalidateSize(), 100);
+}
 </script>
 </body>
 </html>
