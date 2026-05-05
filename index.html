@@ -254,13 +254,22 @@
       <div class="section-label">⚠ BLE lost — LoRaWAN active</div>
       <div class="data-grid">
         <div class="data-item">
-          <span class="data-label">Distance from gateway</span>
+          <span class="data-label">Status</span>
+          <span class="data-value" id="pet-lorawan-status" style="font-size:16px;">--</span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">Est. distance</span>
           <span class="data-value" id="pet-lorawan-dist">--<span class="data-unit">m</span></span>
         </div>
+        <div class="data-item">
+          <span class="data-label">RSSI</span>
+          <span class="data-value" id="pet-lorawan-rssi" style="font-size:18px;">--<span class="data-unit">dBm</span></span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">SNR</span>
+          <span class="data-value" id="pet-lorawan-snr" style="font-size:18px;">--<span class="data-unit">dB</span></span>
+        </div>
       </div>
-    </div>
-    <div style="margin-top: 18px;">
-      <button class="btn danger" onclick="sendCmd('home/cmd/pet_recall','1')" style="max-width: 260px;">🔔 Recall Pet</button>
     </div>
   </div>
 
@@ -292,7 +301,7 @@ const TOPICS = {
   airData:    'home/air/data',
   mailData:   'home/mail/data',
   petStatus:  'home/pet/status',
-  petLorawan: 'home/pet/lorawan',
+  petLorawan: 'iot/group7/lorawan/status',
 };
 
 window.addEventListener('load', () => {
@@ -306,6 +315,7 @@ window.addEventListener('load', () => {
     document.getElementById('statusDot').classList.add('connected');
     document.getElementById('statusText').textContent = 'connected';
     client.subscribe('home/#');
+    client.subscribe('iot/group7/#');
   });
   client.on('error', () => {
     document.getElementById('statusDot').classList.remove('connected');
@@ -348,9 +358,38 @@ function handleMessage(topic, message) {
     document.getElementById('pet-time').textContent = 'updated ' + now;
   }
   else if (topic === TOPICS.petLorawan) {
-    setVal('pet-lorawan-dist', data.distance, 'm');
+    // LoRaWAN message format: {"status":"PET_MISSING","rssi":-98,"snr":-1,"devEUI":"...","time":"..."}
+    const rssi = data.rssi !== undefined ? parseInt(data.rssi) : null;
+    const snr = data.snr !== undefined ? parseFloat(data.snr) : null;
+    const status = data.status || 'UNKNOWN';
+    
+    // Estimate distance from RSSI using log-distance path loss model
+    // d = 10 ^ ((RSSI_ref - RSSI) / (10 * n))
+    // RSSI_ref = -69 dBm at 1 meter (typical for LoRa gateway)
+    // n = 2.7 (path loss exponent, semi-urban/indoor environment)
+    let distance = '--';
+    if (rssi !== null) {
+      const rssiRef = -69;   // RSSI at 1 meter reference
+      const n = 2.7;         // path loss exponent
+      const distMeters = Math.pow(10, (rssiRef - rssi) / (10 * n));
+      distance = distMeters < 1000 ? distMeters.toFixed(0) : (distMeters / 1000).toFixed(1) + 'k';
+    }
+    
+    setVal('pet-lorawan-dist', distance, 'm');
+    setVal('pet-lorawan-rssi', rssi !== null ? rssi : '--', 'dBm');
+    setVal('pet-lorawan-snr', snr !== null ? snr.toFixed(1) : '--', 'dB');
+    document.getElementById('pet-lorawan-status').textContent = status.replace('_', ' ');
+    
+    // Determine zone from status or distance
+    let zone = 2; // alarm by default for LoRaWAN (pet is far)
+    if (status === 'PET_NEARBY') zone = 1;  // warning
+    updatePetZone(zone);
+    
     setPetMode('lorawan');
-    document.getElementById('pet-time').textContent = 'updated ' + now + ' (LoRaWAN)';
+    
+    // Show timestamp from the message if available, otherwise use local time
+    const msgTime = data.time ? new Date(data.time).toLocaleTimeString('en-GB', {hour12: false}) : now;
+    document.getElementById('pet-time').textContent = 'updated ' + msgTime + ' (LoRaWAN)';
   }
 }
 
