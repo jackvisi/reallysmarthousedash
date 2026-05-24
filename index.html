@@ -9,6 +9,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
+  /* Color palette and shared design tokens */
   :root {
     --bg: #0a0e17;
     --card: #111827;
@@ -34,6 +35,7 @@
     color: var(--text);
     min-height: 100vh;
   }
+  /* Subtle grid pattern in the background */
   body::before {
     content: '';
     position: fixed;
@@ -47,7 +49,7 @@
   }
   .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 32px 24px; }
 
-  /* Header */
+  /* Page header with title and connection status */
   .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid var(--card-border); }
   .header h1 { font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
   .header h1 span { color: var(--accent-green); }
@@ -55,7 +57,7 @@
   .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-red); transition: background 0.3s; }
   .status-dot.connected { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
 
-  /* Cards — full width, stacked */
+  /* Card layout: full width, stacked one on top of the other */
   .card {
     background: var(--card);
     border: 1px solid var(--card-border);
@@ -67,6 +69,7 @@
     transition: border-color 0.3s;
   }
   .card:hover { border-color: #334155; }
+  /* Colored stripe on the left side of every card */
   .card::before { content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 4px; border-radius: 16px 0 0 16px; }
   .card.plant::before { background: var(--accent-green); }
   .card.air::before { background: var(--accent-blue); }
@@ -74,7 +77,7 @@
   .card.pet::before { background: var(--accent-purple); }
   .card.controls::before { background: var(--accent-cyan); }
 
-  /* Card header */
+  /* Top section of each card: icon, title and last-update time */
   .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .card-top-left { display: flex; align-items: center; gap: 14px; }
   .card-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
@@ -87,7 +90,7 @@
   .card-subtitle { font-size: 12px; color: var(--text-dim); font-family: 'Space Mono', monospace; }
   .last-update { font-size: 11px; color: var(--text-dim); font-family: 'Space Mono', monospace; }
 
-  /* Data — horizontal row of values */
+  /* Sensor values shown in a row, with label on top and value below */
   .data-grid {
     display: flex;
     gap: 40px;
@@ -98,7 +101,7 @@
   .data-value { font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; line-height: 1; }
   .data-unit { font-size: 14px; color: var(--text-dim); font-weight: 400; margin-left: 2px; }
 
-  /* Buttons row */
+  /* Row of command buttons in the controls card */
   .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
   .btn {
     display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -114,7 +117,7 @@
   .btn.danger { border-color: var(--accent-red); color: var(--accent-red); }
   .btn.danger:hover { background: var(--glow-red); }
 
-  /* Zone */
+  /* Pet zone badge: safe / warning / alarm / unknown */
   .zone-indicator { display: inline-block; padding: 4px 14px; border-radius: 20px; font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
   .zone-safe { background: var(--glow-green); color: var(--accent-green); }
   .zone-warning { background: var(--glow-amber); color: var(--accent-amber); }
@@ -122,7 +125,7 @@
   .zone-unknown { background: rgba(100,116,139,0.2); color: var(--text-dim); }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-  /* Pet tracking mode */
+  /* Little pill showing if we are tracking via BLE or via LoRaWAN fallback */
   .tracking-mode { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   .mode-ble { background: var(--glow-purple); color: var(--accent-purple); }
   .mode-lorawan { background: var(--glow-amber); color: var(--accent-amber); }
@@ -130,6 +133,7 @@
   .mode-ble .mode-dot { background: var(--accent-purple); }
   .mode-lorawan .mode-dot { background: var(--accent-amber); animation: pulse 1s infinite; }
 
+  /* Warning panel that pops up when we lose BLE and fall back to LoRaWAN */
   .lorawan-warning {
     margin-top: 16px;
     padding: 14px 18px;
@@ -144,6 +148,7 @@
     margin-bottom: 10px;
   }
 
+  /* Leaflet map shown inside the LoRaWAN fallback section */
   #pet-map {
     width: 100%;
     height: 280px;
@@ -152,7 +157,7 @@
     border: 1px solid rgba(245,158,11,0.2);
   }
 
-  /* Fix leaflet controls on dark bg */
+  /* Tweak Leaflet's default controls so they fit on a dark background */
   .leaflet-control-zoom a {
     background: var(--card) !important;
     color: var(--text) !important;
@@ -175,6 +180,7 @@
   }
   .gw-tooltip::before { border-top-color: var(--card-border) !important; }
 
+  /* Mobile layout: shrink paddings and stack buttons vertically */
   @media (max-width: 600px) {
     .container { padding: 16px 12px; }
     .card { padding: 20px 18px; }
@@ -189,6 +195,7 @@
 <body>
 <div class="container">
 
+  <!-- Top bar with the dashboard title and the MQTT connection indicator -->
   <div class="header">
     <h1>Really<span>Smart</span>House</h1>
     <div class="status-badge">
@@ -197,7 +204,7 @@
     </div>
   </div>
 
-  <!-- Plant Node -->
+  <!-- Plant node: temperature, humidity and soil moisture -->
   <div class="card plant">
     <div class="card-top">
       <div class="card-top-left">
@@ -222,7 +229,7 @@
     </div>
   </div>
 
-  <!-- Air Node -->
+  <!-- Air node: just temperature and humidity -->
   <div class="card air">
     <div class="card-top">
       <div class="card-top-left">
@@ -243,7 +250,7 @@
     </div>
   </div>
 
-  <!-- Mailbox -->
+  <!-- Mailbox node: how many letters have been detected -->
   <div class="card mail">
     <div class="card-top">
       <div class="card-top-left">
@@ -260,7 +267,7 @@
     </div>
   </div>
 
-  <!-- Pet Tracker -->
+  <!-- Pet tracker: BLE by default, switches to LoRaWAN if we lose the collar -->
   <div class="card pet">
     <div class="card-top">
       <div class="card-top-left">
@@ -269,6 +276,7 @@
       </div>
       <div class="last-update" id="pet-time">no data yet</div>
     </div>
+    <!-- Normal BLE info: which mode, distance and current zone -->
     <div class="data-grid" id="ble-section">
       <div class="data-item">
         <span class="data-label">Mode</span>
@@ -283,6 +291,7 @@
         <span class="zone-indicator zone-unknown" id="pet-zone">unknown</span>
       </div>
     </div>
+    <!-- Extra panel shown only when BLE is lost and we are running on LoRaWAN -->
     <div id="lorawan-section" class="lorawan-warning" style="display:none;">
       <div class="section-label">⚠ BLE lost — LoRaWAN active</div>
       <div class="data-grid">
@@ -307,7 +316,7 @@
     </div>
   </div>
 
-  <!-- Controls -->
+  <!-- Controls card: buttons that send commands to the nodes -->
   <div class="card controls">
     <div class="card-top">
       <div class="card-top-left">
@@ -324,12 +333,15 @@
 </div>
 
 <script>
+// MQTT broker config: same HiveMQ Cloud instance as the gateway, but over websockets
 const BROKER_URL  = 'wss://14cae6d240b2426398a24b5f85cda552.s1.eu.hivemq.cloud:8884/mqtt';
 const BROKER_USER = 'group7';
 const BROKER_PASS = 'Groupgroup7';
 
 let client = null;
+// Remembers the on/off state of each toggle button
 const toggleStates = {};
+// All the MQTT topics the dashboard cares about
 const TOPICS = {
   plantData:  'home/plant/data',
   airData:    'home/air/data',
@@ -338,6 +350,7 @@ const TOPICS = {
   petLorawan: 'iot/group7/lorawan/status',
 };
 
+// Connects to MQTT and wires up all the event handlers as soon as the page is loaded
 window.addEventListener('load', () => {
   client = mqtt.connect(BROKER_URL, {
     username: BROKER_USER,
@@ -365,6 +378,7 @@ window.addEventListener('load', () => {
   client.on('message', handleMessage);
 });
 
+// Main MQTT dispatcher: figures out which card the message belongs to and updates it
 function handleMessage(topic, message) {
   const payload = message.toString();
   const now = timeStr();
@@ -392,20 +406,21 @@ function handleMessage(topic, message) {
     document.getElementById('pet-time').textContent = 'updated ' + now;
   }
   else if (topic === TOPICS.petLorawan) {
-    // LoRaWAN format: {"status":"PET_MISSING","rssi":-90,"snr":14,"gw_lat":55.78,"gw_lon":12.51,"devEUI":"...","time":"..."}
+    // LoRaWAN payload looks like: {"status":"PET_MISSING","rssi":-90,"snr":14,"gw_lat":55.78,"gw_lon":12.51,"devEUI":"...","time":"..."}
     const rssi = data.rssi !== undefined ? parseInt(data.rssi) : null;
     const snr = data.snr !== undefined ? parseFloat(data.snr) : null;
     const status = data.status || 'UNKNOWN';
     const gwLat = data.gw_lat !== undefined ? parseFloat(data.gw_lat) : null;
     const gwLon = data.gw_lon !== undefined ? parseFloat(data.gw_lon) : null;
     
-    // Estimate distance from RSSI using log-distance path loss model
-    const rssiRef = -69;   // RSSI at 1 meter
-    const n = 2.7;         // path loss exponent (outdoor/semi-urban)
+    // Rough distance estimate from RSSI, using a log-distance path-loss model
+    const rssiRef = -69;   // expected RSSI at 1 metre
+    const n = 2.7;         // path loss exponent (outdoor / semi-urban)
     let distMeters = null;
     let distLabel = '--';
     if (rssi !== null) {
       distMeters = Math.pow(10, (rssiRef - rssi) / (10 * n));
+      // Show metres up to 1 km, then switch to kilometres
       distLabel = distMeters < 1000 ? distMeters.toFixed(0) : (distMeters / 1000).toFixed(1) + 'k';
     }
     
@@ -414,12 +429,13 @@ function handleMessage(topic, message) {
     setVal('pet-lorawan-snr', snr !== null ? snr.toFixed(1) : '--', 'dB');
     document.getElementById('pet-lorawan-status').textContent = status.replace(/_/g, ' ');
     
+    // Map the status to a zone color: nearby = warning, anything else = alarm
     let zone = 2;
     if (status === 'PET_NEARBY') zone = 1;
     updatePetZone(zone);
     setPetMode('lorawan');
     
-    // Update map if gateway coordinates are available
+    // Only draw the map if the LoRaWAN gateway told us where it is
     if (gwLat !== null && gwLon !== null) {
       updatePetMap(gwLat, gwLon, distMeters);
     }
@@ -429,6 +445,7 @@ function handleMessage(topic, message) {
   }
 }
 
+// Switches the pet card between the BLE view and the LoRaWAN fallback view
 function setPetMode(mode) {
   const modeEl = document.getElementById('pet-mode');
   const lorawanSection = document.getElementById('lorawan-section');
@@ -443,6 +460,7 @@ function setPetMode(mode) {
   }
 }
 
+// Accepts either JSON or our usual "key=value;key=value" format and returns an object
 function parsePayload(str) {
   try { const j = JSON.parse(str); if (typeof j === 'object') return j; } catch(e) {}
   const obj = {};
@@ -453,12 +471,14 @@ function parsePayload(str) {
   return obj;
 }
 
+// Small helper that drops a value into the right DOM element, with an optional unit
 function setVal(id, value, unit) {
   const el = document.getElementById(id);
   if (!el || value === undefined || value === null) return;
   el.innerHTML = unit ? value + '<span class="data-unit">' + unit + '</span>' : value;
 }
 
+// Picks the right label and color for the zone badge based on the zone number
 function updatePetZone(zone) {
   const el = document.getElementById('pet-zone');
   const labels = ['Safe','Warning','Alarm!','Unknown'];
@@ -468,11 +488,13 @@ function updatePetZone(zone) {
   el.textContent = labels[idx];
 }
 
+// Publishes a command on MQTT, but only if we are actually connected
 function sendCmd(topic, value) {
   if (!client || !client.connected) return;
   client.publish(topic, value);
 }
 
+// Flips a button between on and off and sends the corresponding command
 function toggleCmd(topic, btnId) {
   const btn = document.getElementById(btnId);
   toggleStates[btnId] = !toggleStates[btnId];
@@ -480,18 +502,21 @@ function toggleCmd(topic, btnId) {
   sendCmd(topic, toggleStates[btnId] ? '1' : '0');
 }
 
+// Returns the current time as HH:MM:SS, used for the "updated at" labels
 function timeStr() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
 
 // ── Map ─────────────────────────────────────────────────────
+// Leaflet map for the LoRaWAN fallback: shows the gateway and a circle around it
 let petMap = null;
 let gwMarker = null;
 let distCircle = null;
 
+// Creates the map on the first call, then just updates the marker and circle on later calls
 function updatePetMap(lat, lon, radiusMeters) {
   const mapDiv = document.getElementById('pet-map');
   if (!mapDiv) return;
 
-  // Initialize map if first time
+  // First time we are called: build the map and add the dark tile layer
   if (!petMap) {
     petMap = L.map('pet-map', {
       zoomControl: true,
@@ -499,14 +524,14 @@ function updatePetMap(lat, lon, radiusMeters) {
       scrollWheelZoom: true,
     }).setView([lat, lon], 15);
 
-    // Dark tile layer to match dashboard theme
+    // Dark Carto tiles so the map fits the rest of the dashboard
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OSM &copy; CARTO',
       maxZoom: 19,
     }).addTo(petMap);
   }
 
-  // Update or create gateway marker
+  // Place the gateway marker, or move the existing one
   if (gwMarker) {
     gwMarker.setLatLng([lat, lon]);
   } else {
@@ -524,7 +549,7 @@ function updatePetMap(lat, lon, radiusMeters) {
     });
   }
 
-  // Update or create distance circle
+  // Draw a dashed red circle showing roughly where the pet could be
   const radius = radiusMeters ? Math.max(radiusMeters, 20) : 100;
   if (distCircle) {
     distCircle.setLatLng([lat, lon]);
@@ -540,17 +565,17 @@ function updatePetMap(lat, lon, radiusMeters) {
     }).addTo(petMap);
   }
 
-  // Add label to circle
+  // Tooltip that shows the radius in metres when you hover the circle
   distCircle.bindTooltip('Pet is approx. within this area (~' + Math.round(radius) + 'm)', {
     permanent: false,
     direction: 'center',
     className: 'gw-tooltip',
   });
 
-  // Fit map to show the circle
+  // Zoom and pan the map so the whole circle fits, with a bit of padding
   petMap.fitBounds(distCircle.getBounds().pad(0.3));
 
-  // Force map to redraw (needed when container was hidden)
+  // The map container is hidden at first, so force Leaflet to recompute its size
   setTimeout(() => petMap.invalidateSize(), 100);
 }
 </script>
